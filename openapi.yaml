@@ -202,7 +202,7 @@ paths:
             default: false
       responses:
         '200':
-          description: Successfully retrieved dictionary entries
+          description: Successfully processed the request. Returns matching entries or an empty array if no entries are found.
           content:
             application/json:
               schema:
@@ -226,12 +226,6 @@ paths:
                 dictionaries_searched:
                   - "rus-iron_v16"
                 time_taken: 0.0003108978271484375
-        '404':
-          description: No entries found for the given word
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
 
   /multi-lookup:
     get:
@@ -287,17 +281,11 @@ paths:
             default: false
       responses:
         '200':
-          description: Successfully retrieved dictionary entries
+          description: Successfully processed the request. Returns matching entries or an empty array if no entries are found.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/WordLookupResponse'
-        '404':
-          description: No entries found for the given query
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
 
   /search:
     get:
@@ -367,17 +355,11 @@ paths:
             default: false
       responses:
         '200':
-          description: Successfully retrieved search results
+          description: Successfully processed the request. Returns matching entries or an empty array if no entries are found.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/WordLookupResponse'
-        '404':
-          description: No entries found for the given search query
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
 
   /prefix-search/{prefix}:
     get:
@@ -438,17 +420,11 @@ paths:
             default: false
       responses:
         '200':
-          description: Successfully retrieved entries starting with the prefix
+          description: Successfully processed the request. Returns matching entries or an empty array if no entries are found.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/WordLookupResponse'
-        '404':
-          description: No entries found starting with the given prefix
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
 
   /list-entries:
     get:
