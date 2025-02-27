@@ -884,7 +884,7 @@ async def search_word(
     exact_match: bool = Query(False, description="Whether to perform exact word matching or search within definitions"),
     clean_markup: bool = Query(True, description="Whether to clean DSL markup tags (like [p], [trn], [com]) in definitions by removing them or converting to simple text"),
     structured: bool = Query(True, description="Whether to return structured data with parsed DSL markup into separate fields for meanings, translations, etc. Default is True for structured output, set to False for simple format."),
-    limit: int = Query(50, description="Maximum number of entries to return"),
+    limit: int = Query(20, description="Maximum number of entries to return"),
     readable_text: bool = Query(False, description="Whether to return readable Unicode text instead of escaped characters (helpful for non-Latin alphabets)"),
     html_output: bool = Query(False, description="Whether to convert DSL markup to HTML for better display in browsers and JSON viewers. When set to true, this takes precedence over clean_markup."),
     include_references: bool = Query(True, description="Whether to include entries referenced in look_for sections (non-recursive)")
