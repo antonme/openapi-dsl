@@ -793,6 +793,10 @@ async def lookup_word(
                                 if normalize_headword(ref_word) != normalize_headword(word):
                                     referenced_words.add(ref_word)
         
+        # Keep track of references per word to limit them
+        references_per_word = {}
+        MAX_REFS_PER_WORD = 10
+        
         # Look up each referenced word
         for ref_word in referenced_words:
             # Normalize the word for lookup
@@ -812,6 +816,12 @@ async def lookup_word(
                         remaining_limit = limit - len(direct_entries)
                         if len(referenced_entries) >= remaining_limit:
                             break
+                        
+                        # Check if we've reached the per-word reference limit
+                        word_key = f"{ref_word}:{dict_name}"
+                        references_per_word[word_key] = references_per_word.get(word_key, 0) + 1
+                        if references_per_word[word_key] > MAX_REFS_PER_WORD:
+                            continue
                         
                         definition = dictionaries[dict_name][original_headword]
                         
@@ -1005,6 +1015,10 @@ async def search_word(
                             if normalize_headword(ref_word) != normalize_headword(query):
                                 referenced_words.add(ref_word)
         
+        # Keep track of references per word to limit them
+        references_per_word = {}
+        MAX_REFS_PER_WORD = 10
+        
         # Look up each referenced word
         for ref_word in referenced_words:
             # Normalize the word for lookup
@@ -1020,6 +1034,12 @@ async def search_word(
                     dicts_searched.add(dict_name)
                     
                     for original_headword in headwords:
+                        # Check if we've reached the per-word reference limit
+                        word_key = f"{ref_word}:{dict_name}"
+                        references_per_word[word_key] = references_per_word.get(word_key, 0) + 1
+                        if references_per_word[word_key] > MAX_REFS_PER_WORD:
+                            continue
+                            
                         definition = dictionaries[dict_name][original_headword]
                         
                         if structured:
@@ -1147,6 +1167,10 @@ async def prefix_search(
                             if normalize_headword(ref_word) != normalize_headword(prefix):
                                 referenced_words.add(ref_word)
         
+        # Keep track of references per word to limit them
+        references_per_word = {}
+        MAX_REFS_PER_WORD = 10
+        
         # Look up each referenced word
         for ref_word in referenced_words:
             # Normalize the word for lookup
@@ -1162,6 +1186,12 @@ async def prefix_search(
                     dicts_searched.add(dict_name)
                     
                     for original_headword in headwords:
+                        # Check if we've reached the per-word reference limit
+                        word_key = f"{ref_word}:{dict_name}"
+                        references_per_word[word_key] = references_per_word.get(word_key, 0) + 1
+                        if references_per_word[word_key] > MAX_REFS_PER_WORD:
+                            continue
+                            
                         definition = dictionaries[dict_name][original_headword]
                         
                         if structured:
