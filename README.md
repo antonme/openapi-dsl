@@ -1,6 +1,6 @@
 # Dictionary API Server
 
-A high-performance OpenAPI-compliant server for dictionary lookups.
+A simple OpenAPI-compliant server for Lingvo DSL dictionary lookups
 
 ## Features
 
