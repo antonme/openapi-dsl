@@ -46,7 +46,7 @@ info:
     url: https://opensource.org/licenses/MIT
 
 servers:
-  - url: "https://maxwell.fold-paradise.ts.net"
+  - url: "https://192.168.1.30:8000"
     description: Ossetian Dictionaries OpenAPI point
 
 tags:
@@ -148,23 +148,38 @@ paths:
       summary: Look up a word or phrase
       description: |
         Look up a word or phrase in the dictionaries.
-        Returns the complete article with all linguistic data.
+        
+        This endpoint handles both single and multi-word queries:
+        - Single words are looked up directly
+        - Phrases (with spaces in the URL path) are processed by looking up each word individually
+        
+        This endpoint fully replaces the previous /multi-lookup functionality, with the
+        advantage of cleaner URLs and consistent parameter handling.
+        
+        Returns the complete article with all linguistic data for each matched word.
       operationId: lookupWord
       parameters:
         - name: word
           in: path
-          description: The word or phrase to look up
+          description: |
+            The word or phrase to look up. 
+            Can contain spaces to look up multiple words at once (e.g., "hello world").
+            URL-encoding is required for non-ASCII characters and spaces.
           required: true
           schema:
             type: string
         - name: dictionaries
           in: query
-          description: Filter results to specific dictionaries
+          description: |
+            Filter results to specific dictionaries. Can be used multiple times in a query.
+            Example: ?dictionaries=dict1&dictionaries=dict2
+            Note: Do NOT use array notation with brackets like ?dictionaries[]=dict1 as this is not supported.
           required: false
           schema:
             type: array
             items:
               type: string
+          explode: true  # This means each value gets its own parameter instance
         - name: exact_match
           in: query
           description: Whether to perform exact matching or allow partial matches
@@ -200,6 +215,22 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: include_references
+          in: query
+          description: Whether to include entries referenced in look_for sections (non-recursive)
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - name: dict_list
+          in: query
+          description: |
+            Comma-separated list of dictionaries to filter by (alternative format).
+            Example: ?dict_list=iron-rus_v16,rus-iron_v16
+            This is an easier way to specify multiple dictionaries in a single parameter.
+          required: false
+          schema:
+            type: string
       responses:
         '200':
           description: Successfully processed the request. Returns matching entries or an empty array if no entries are found.
@@ -227,66 +258,6 @@ paths:
                   - "rus-iron_v16"
                 time_taken: 0.0003108978271484375
 
-  /multi-lookup:
-    get:
-      tags:
-        - Dictionary Lookup
-      summary: Look up multiple words or phrases
-      description: |
-        Look up multiple words or phrases in the dictionaries.
-        Returns complete articles for each word.
-      operationId: multiWordLookup
-      parameters:
-        - name: query
-          in: query
-          description: Space-separated words to look up
-          required: true
-          schema:
-            type: string
-        - name: dictionaries
-          in: query
-          description: Filter results to specific dictionaries
-          required: false
-          schema:
-            type: array
-            items:
-              type: string
-        - name: clean_markup
-          in: query
-          description: Whether to clean DSL markup tags (like [p], [trn], [com]) in definitions by removing them or converting to simple text
-          required: false
-          schema:
-            type: boolean
-            default: true
-        - name: structured
-          in: query
-          description: Whether to return structured data with parsed DSL markup into separate fields for meanings, translations, etc. Default is True for structured output, set to False for simple format.
-          required: false
-          schema:
-            type: boolean
-            default: true
-        - name: readable_text
-          in: query
-          description: Whether to return readable Unicode text instead of escaped characters (helpful for non-Latin alphabets)
-          required: false
-          schema:
-            type: boolean
-            default: false
-        - name: html_output
-          in: query
-          description: Whether to convert DSL markup to HTML for better display in browsers and JSON viewers. When set to true, this takes precedence over clean_markup.
-          required: false
-          schema:
-            type: boolean
-            default: false
-      responses:
-        '200':
-          description: Successfully processed the request. Returns matching entries or an empty array if no entries are found.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/WordLookupResponse'
-
   /search:
     get:
       tags:
@@ -305,12 +276,16 @@ paths:
             type: string
         - name: dictionaries
           in: query
-          description: Filter results to specific dictionaries
+          description: |
+            Filter results to specific dictionaries. Can be used multiple times in a query.
+            Example: ?dictionaries=dict1&dictionaries=dict2
+            Note: Do NOT use array notation with brackets like ?dictionaries[]=dict1 as this is not supported.
           required: false
           schema:
             type: array
             items:
               type: string
+          explode: true  # This means each value gets its own parameter instance
         - name: exact_match
           in: query
           description: Whether to perform exact word matching or search within definitions
@@ -353,6 +328,22 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: include_references
+          in: query
+          description: Whether to include entries referenced in look_for sections (non-recursive)
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - name: dict_list
+          in: query
+          description: |
+            Comma-separated list of dictionaries to filter by (alternative format).
+            Example: ?dict_list=iron-rus_v16,rus-iron_v16
+            This is an easier way to specify multiple dictionaries in a single parameter.
+          required: false
+          schema:
+            type: string
       responses:
         '200':
           description: Successfully processed the request. Returns matching entries or an empty array if no entries are found.
@@ -366,7 +357,15 @@ paths:
       tags:
         - Dictionary Lookup
       summary: Find entries starting with a prefix
-      description: Find dictionary entries that start with the given prefix
+      description: |
+        Find dictionary entries that start with the given prefix.
+        
+        This endpoint is useful for:
+        - Auto-completion features in UI
+        - Browsing dictionaries by letter or partial word
+        - Finding all words starting with a specific prefix
+        
+        Results are limited by the limit parameter (default: 10).
       operationId: prefixSearch
       parameters:
         - name: prefix
@@ -377,12 +376,25 @@ paths:
             type: string
         - name: dictionaries
           in: query
-          description: Filter results to specific dictionaries
+          description: |
+            Filter results to specific dictionaries. Can be used multiple times in a query.
+            Example: ?dictionaries=dict1&dictionaries=dict2
+            Note: Do NOT use array notation with brackets like ?dictionaries[]=dict1 as this is not supported.
           required: false
           schema:
             type: array
             items:
               type: string
+          explode: true  # This means each value gets its own parameter instance
+        - name: dict_list
+          in: query
+          description: |
+            Comma-separated list of dictionaries to filter by (alternative format).
+            Example: ?dict_list=iron-rus_v16,rus-iron_v16
+            This is an easier way to specify multiple dictionaries in a single parameter.
+          required: false
+          schema:
+            type: string
         - name: clean_markup
           in: query
           description: Whether to clean DSL markup tags (like [p], [trn], [com]) in definitions by removing them or converting to simple text
@@ -418,6 +430,13 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: include_references
+          in: query
+          description: Whether to include entries referenced in look_for sections (non-recursive)
+          required: false
+          schema:
+            type: boolean
+            default: true
       responses:
         '200':
           description: Successfully processed the request. Returns matching entries or an empty array if no entries are found.
@@ -485,6 +504,13 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: include_references
+          in: query
+          description: Whether to include entries referenced in look_for sections (non-recursive)
+          required: false
+          schema:
+            type: boolean
+            default: true
       responses:
         '200':
           description: Successfully retrieved paginated entries

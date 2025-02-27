@@ -101,6 +101,42 @@ app = FastAPI(
     - `[ex]` - Example usage
     
     For most applications, using `clean_markup=true`, `structured=true`, or `html_output=true` is recommended.
+    
+    ## Filtering by Dictionary
+    
+    This API supports multiple ways to filter results by dictionary:
+    
+    1. Using repeated parameters (preferred):
+       `/lookup/word?dictionaries=dict1&dictionaries=dict2`
+    
+    2. Using a comma-separated list (simpler for some clients):
+       `/lookup/word?dict_list=dict1,dict2`
+    
+    Note: Do NOT use array notation with square brackets (`dictionaries[]=dict1`) as this is not supported by the API.
+    
+    ## Understanding API Endpoints
+    
+    This API offers two main approaches for dictionary access:
+    
+    ### 1. Lookup (/lookup/{word})
+    
+    Direct, precise dictionary lookups when you know what word(s) you're looking for:
+    - Returns complete dictionary entries
+    - Handles both single words and multi-word queries (spaces in the path)
+    - By default performs exact matching
+    - Returns all matching entries with no limit
+    
+    Example: `/lookup/hello` or `/lookup/hello world`
+    
+    ### 2. Search (/search?query=text)
+    
+    Broader, exploratory search across dictionaries:
+    - By default searches within definition content
+    - Can be configured to search only headwords with exact_match=true
+    - Limited to a specific number of results (default: 10)
+    - Better for discovering related words or when unsure of exact spelling
+    
+    Example: `/search?query=greeting` or `/search?query=greet&exact_match=true`
     """,
     version="1.0.0",
 )
@@ -433,8 +469,19 @@ async def startup_event():
     logger.info(f"Loaded {len(dictionaries)} dictionaries with {sum(info['entry_count'] for info in dictionary_info.values())} total entries")
 
 # Dictionary filtering dependency
-def get_dictionary_filter(dict_names: Optional[List[str]] = Query(None, description="Filter results to specific dictionaries")):
+def get_dictionary_filter(
+    dict_filter: Optional[List[str]] = Query(None, description="Filter results to specific dictionaries (preferred name)"),
+    dictionaries: Optional[List[str]] = Query(None, description="Filter results to specific dictionaries (alternative name for backward compatibility)"),
+    dict_list: Optional[str] = Query(None, description="Comma-separated list of dictionaries to filter by (alternative format)")
+):
     """Filter for dictionaries to search in"""
+    # Use dict_filter if provided, otherwise use dictionaries
+    dict_names = dict_filter if dict_filter is not None else dictionaries
+    
+    # If dict_list is provided, parse it as comma-separated and use that instead
+    if dict_list is not None:
+        dict_names = [name.strip() for name in dict_list.split(",") if name.strip()]
+    
     if dict_names is None or len(dict_names) == 0:
         return None
     return set(dict_names)
@@ -500,7 +547,13 @@ async def lookup_word(
     include_references: bool = Query(True, description="Whether to include entries referenced in look_for sections (non-recursive)")
 ):
     """
-    Look up a word or phrase in the dictionaries
+    Look up a word or phrase in the dictionaries.
+    
+    This endpoint can handle both single words and multi-word queries.
+    - For single words, it performs direct dictionary lookups
+    - For phrases (with spaces), it splits the input and looks up each word independently
+    
+    The endpoint always returns complete dictionary articles for each matched word.
     """
     start_time = time.time()
     
@@ -747,145 +800,6 @@ async def lookup_word(
     # Use a custom response class that will exclude null values
     return ReadableJSONResponse(content=response_data)
 
-@app.get("/multi-lookup", response_model=WordLookupResponse, tags=["Dictionary Lookup"])
-async def multi_word_lookup(
-    query: str = Query(..., description="Space-separated words to look up"),
-    dict_filter: Optional[Set[str]] = Depends(get_dictionary_filter),
-    clean_markup: bool = Query(True, description="Whether to clean DSL markup tags (like [p], [trn], [com]) in definitions by removing them or converting to simple text"),
-    structured: bool = Query(True, description="Whether to return structured data with parsed DSL markup into separate fields for meanings, translations, etc. Default is True for structured output, set to False for simple format."),
-    readable_text: bool = Query(False, description="Whether to return readable Unicode text instead of escaped characters (helpful for non-Latin alphabets)"),
-    html_output: bool = Query(False, description="Whether to convert DSL markup to HTML for better display in browsers and JSON viewers. When set to true, this takes precedence over clean_markup."),
-    include_references: bool = Query(True, description="Whether to include entries referenced in look_for sections (non-recursive)")
-):
-    """
-    Look up multiple words or phrases in the dictionaries.
-    Returns complete articles for each word.
-    """
-    start_time = time.time()
-    words = query.split()
-    entries = []
-    dicts_searched = set()
-    
-    for word in words:
-        # Normalize the word for lookup
-        norm_word = normalize_headword(word)
-        
-        word_found = False
-        
-        # Look up in inverted index
-        if norm_word in inverted_index:
-            for dict_name, headwords in inverted_index[norm_word].items():
-                # Apply dictionary filter if provided
-                if dict_filter and dict_name not in dict_filter:
-                    continue
-                
-                dicts_searched.add(dict_name)
-                
-                for original_headword in headwords:
-                    word_found = True
-                    definition = dictionaries[dict_name][original_headword]
-                    
-                    if structured:
-                        # Parse structure before cleaning markup
-                        structure_data = parse_dsl_structure(definition)
-                        
-                        # Always convert the html_definition field to HTML
-                        structure_data["html_definition"] = convert_dsl_to_html(definition)
-                            
-                        entries.append(StructuredWordEntry(
-                            word=original_headword,
-                            dictionary=dict_name,
-                            dictionary_display_name=get_display_name(dict_name),
-                            **structure_data
-                        ))
-                    else:
-                        if html_output:
-                            definition = convert_dsl_to_html(definition)
-                        elif clean_markup:
-                            definition = clean_dsl_markup(definition)
-                        
-                        entries.append(WordEntry(
-                            word=original_headword,
-                            dictionary=dict_name,
-                            dictionary_display_name=get_display_name(dict_name),
-                            definition=definition
-                        ))
-    
-    # Look up referenced entries if requested
-    referenced_entries = []
-    if include_references and structured:
-        referenced_words = set()
-        
-        # Collect all look_for words
-        for entry in entries:
-            if isinstance(entry, StructuredWordEntry) and entry.meanings:
-                for meaning in entry.meanings:
-                    if meaning.look_for:
-                        for ref_word in meaning.look_for:
-                            # Don't add self-references
-                            if normalize_headword(ref_word) not in [normalize_headword(w) for w in words]:
-                                referenced_words.add(ref_word)
-        
-        # Look up each referenced word
-        for ref_word in referenced_words:
-            # Normalize the word for lookup
-            norm_ref_word = normalize_headword(ref_word)
-            
-            # If in inverted index, look it up
-            if norm_ref_word in inverted_index:
-                for dict_name, headwords in inverted_index[norm_ref_word].items():
-                    # Apply dictionary filter if provided
-                    if dict_filter and dict_name not in dict_filter:
-                        continue
-                    
-                    dicts_searched.add(dict_name)
-                    
-                    for original_headword in headwords:
-                        definition = dictionaries[dict_name][original_headword]
-                        
-                        if structured:
-                            # Parse structure before cleaning markup
-                            structure_data = parse_dsl_structure(definition)
-                            
-                            # Always convert the html_definition field to HTML
-                            structure_data["html_definition"] = convert_dsl_to_html(definition)
-                                
-                            referenced_entries.append(StructuredWordEntry(
-                                word=original_headword,
-                                dictionary=dict_name,
-                                dictionary_display_name=get_display_name(dict_name),
-                                **structure_data
-                            ))
-                        else:
-                            if html_output:
-                                definition = convert_dsl_to_html(definition)
-                            elif clean_markup:
-                                definition = clean_dsl_markup(definition)
-                            
-                            referenced_entries.append(WordEntry(
-                                word=original_headword,
-                                dictionary=dict_name,
-                                dictionary_display_name=get_display_name(dict_name),
-                                definition=definition
-                            ))
-        
-        # Add referenced entries to the result
-        entries.extend(referenced_entries)
-    
-    response_data = WordLookupResponse(
-        entries=entries if entries else [],  # Ensure empty list instead of null
-        query=query,
-        count=len(entries),
-        dictionaries_searched=list(dicts_searched),
-        time_taken=time.time() - start_time
-    )
-    
-    # Return with readable text if requested
-    if readable_text:
-        return ReadableJSONResponse(content=response_data.dict())
-    else:
-        return response_data
-
 @app.get("/search", response_model=WordLookupResponse, tags=["Dictionary Lookup"])
 async def search_word(
     query: str = Query(..., description="Search query to find in dictionary entries"),
@@ -900,7 +814,13 @@ async def search_word(
 ):
     """
     Search for words or phrases across dictionaries.
-    This can search in headwords or definitions based on the exact_match parameter.
+    
+    This endpoint is designed for broader searches:
+    - When exact_match=False (default): Searches within the entire definition text
+    - When exact_match=True: Finds headwords that partially match the query
+    
+    The search is limited to a specified number of results (default: 10) and is 
+    ideal for exploratory searching when you don't know the exact word.
     """
     start_time = time.time()
     

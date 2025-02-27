@@ -8,7 +8,7 @@ A simple OpenAPI-compliant server for Lingvo DSL dictionary lookups.
 - Fast dictionary lookups (<500ms response time)
 - Complete preservation of linguistic data from DSL dictionaries
 - Support for stress marks, conjugations, declensions, and other linguistic features
-- Multi-word lookup capabilities
+- Support for both direct dictionary lookups and content searching
 - Inverted indexing for efficient searches
 - Automatic caching of parsed dictionaries for faster startup
 - OpenAPI documentation with Swagger UI
@@ -53,11 +53,34 @@ The first time you start the server, it will parse all DSL dictionaries in the `
 
 Once the server is running, you can access the following endpoints:
 
+#### Main Dictionary Endpoints
+
 - **GET /dictionaries**: List all available dictionaries with their statistics
-- **GET /lookup/{word}**: Look up a specific word or phrase
-- **GET /multi-lookup?query=word1 word2**: Look up multiple words at once
+- **GET /lookup/{word}**: Look up specific words or phrases in dictionaries
 - **GET /search?query=text**: Search within dictionary entries
 - **GET /health**: Health check endpoint
+
+#### Understanding the Difference Between Lookup and Search
+
+The API offers two distinct ways to find dictionary information:
+
+1. **Lookup** (`/lookup/{word}`):
+   - Purpose: Direct dictionary lookup for known words
+   - Behavior: 
+     - Returns complete dictionary entries for exact matches
+     - Can handle multiple words (spaces in the URL path)
+     - By default uses exact matching (can be changed with the `exact_match` parameter)
+     - Returns all matching entries
+
+2. **Search** (`/search?query=text`):
+   - Purpose: Exploratory search for relevant information
+   - Behavior:
+     - By default searches within definitions (content search)
+     - Can search only in headwords with `exact_match=true`
+     - Results are limited to 10 entries by default (configurable with `limit`)
+     - Better for when you don't know the exact word or want to find related information
+
+Choose the endpoint that better fits your use case - lookup for known words, search for exploration.
 
 ### API Documentation
 
