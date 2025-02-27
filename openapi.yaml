@@ -13,14 +13,41 @@ info:
     - Raw dictionary format with original DSL markup
     - HTML output for better display in browsers and JSON viewers
     - Readable text for non-Latin alphabets
+    
+    ## Available Dictionaries
+    
+    The API currently provides access to the following dictionaries:
+    
+    | Dictionary | Display Name | Entry Count | Authors | Publication Year |
+    |------------|--------------|-------------|---------|------------------|
+    | iron-rus_v16 | Иронско-Русский | 26,785 | Б.Б. Бигулаев, К.Е. Гагкаев, Н.Х. Кулаев, О.Н. Туаева | 1993 (4th ed.) |
+    | rus-iron_v16 | Русско-Иронский | 25,225 | В.И. Абаев | 1970 (2nd ed.) |
+    | digor-rus_v16 | Дигорско-Русский | 26,827 | Ф.М. Таказов | 2003 |
+    | iron_spelling_v16 | Ирон орфографи | 49,771 | - | - |
+    | IronParadigms_v16 | ДЗЫРДАРÆЗТ | 2,866 | - | 2009 |
+    | IronPhras_v16 | Иронские фразеологизмы | 5,240 | З.Т. Дзабиты | 2003 (2nd ed.) |
+    | etnomif_v16 | Этнографи æмæ мифологи | 1,890 | А.Б. Дзадзиев, Х.В. Дзуцев, С.М. Караев | 1994-2005 |
+    | lingv_v16 | Лингв. термины (Ru-Os) | 528 | Л.Б. Гацалова | 2007 |
+    
+    Total entries across all dictionaries: 139,132
+    
+    ### Dictionary Sources
+    
+    - **Иронско-Русский**: Осетинско-русский словарь под редакцией А.М. Касаева, Редактор издания Гуриев Т.А. Издательство Северо-Осетинского института гуманитарных исследований, 1993.
+    - **Русско-Иронский**: Русско-осетинско словарь. Составил В.И. Абаев. Редактор издания М.И. Исаев. Издательство «Советская энциклопедия», 1970.
+    - **Дигорско-Русский**: Дигорско-русский словарь. Составитель Таказов Ф.М. Научный редактор: Гуриев Т.А. Издательство «Алания», 2003.
+    - **ДЗЫРДАРÆЗТ**: Словарь словообразования и парадигм осетинского языка. Выпуск приурочен к 150-летию со дня рождения Коста Хетагурова (2009).
+    - **Иронские фразеологизмы**: Фразеологический словарь иронского диалекта. Составил Дзабиты З.Т. Редактор издания Дзиццойты Ю.А. Полиграфическое производственное объединение РЮО, 2003.
+    - **Этнографи æмæ мифологи**: Составлено из нескольких источников (1994-2005), включая работы Дзадзиева А.Б., Дзуцева Х.В., Караева С.М.
+    - **Лингв. термины (Ru-Os)**: Русско-осетинский, осетинско-русский словарь лингвистических терминов. Составил Гацалова Л.Б. РИО СОИГСИ, 2007.
   version: 1.0.0
   license:
     name: MIT
     url: https://opensource.org/licenses/MIT
 
 servers:
-  - url: http://localhost:8001
-    description: Local development server
+  - url: "https://maxwell.fold-paradise.ts.net"
+    description: Ossetian Dictionaries OpenAPI point
 
 tags:
   - name: Dictionaries
@@ -80,6 +107,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DictionaryList'
+              example:
+                dictionaries:
+                  - name: "iron-rus_v16"
+                    display_name: "Иронско-Русский"
+                    entry_count: 26785
+                    description: "ИРОН-УЫРЫССАГ ДЗЫРДУАТ\nИРОНСКО-РУССКИЙ СЛОВАРЬ: 26785 карточек."
+                    language_from: "Russian"
+                    language_to: "Russian"
+                    file_size: 8071684
+                    authors: "Б.Б. Бигулаев, К.Е. Гагкаев, Н.Х. Кулаев, О.Н. Туаева"
+                    publication_year: "1993"
+                  - name: "rus-iron_v16"
+                    display_name: "Русско-Иронский"
+                    entry_count: 25225
+                    description: "УЫРЫССАГ-ИРОН ДЗЫРДУАТ\nРУССКО-ИРОНСКИЙ СЛОВАРЬ: 25225 карточек."
+                    language_from: "Russian"
+                    language_to: "Russian"
+                    file_size: 8020732
+                    authors: "В.И. Абаев"
+                    publication_year: "1970"
+                total_count: 8
+                statistics:
+                  total_entries: 139132
+                  total_size_bytes: 70746612
+                  average_entries_per_dictionary: 17391.5
+                  largest_dictionary: "Ирон орфографи"
+                  smallest_dictionary: "Лингв. термины (Ru-Os)"
         '500':
           description: Dictionaries not loaded
           content:
@@ -153,6 +207,25 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WordLookupResponse'
+              example:
+                entries:
+                  - word: "абажур"
+                    dictionary: "rus-iron_v16"
+                    dictionary_display_name: "Русско-Иронский"
+                    part_of_speech:
+                      - value: "*(муж.)*"
+                        abbreviation: "муж."
+                    meanings:
+                      - number: 1
+                        definition: "*(муж.)*"
+                        translations:
+                          - text: "абажур, лампæмбæрзæн"
+                    html_definition: "<p><i><span class=\"formatted\"><span class=\"translation\" data-num=\"1\"><span class=\"comment\">муж.</span></span></i></p> абажур, лампæмбæрзæн</span></p>"
+                query: "абажур"
+                count: 1
+                dictionaries_searched:
+                  - "rus-iron_v16"
+                time_taken: 0.0003108978271484375
         '404':
           description: No entries found for the given word
           content:
