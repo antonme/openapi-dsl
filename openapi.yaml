@@ -7,7 +7,39 @@ info:
     This API provides access to DSL dictionaries with full preservation of linguistic features
     such as stresses, conjugations, declensions, and other metadata.
     
-    The API supports multiple output formats:
+    ## URL Encoding
+    
+    IMPORTANT: All non-ASCII characters and spaces in URLs must be properly URL-encoded. 
+    For example, the Ossetian word "бастдзинад" should be encoded as "%D0%B1%D0%B0%D1%81%D1%82%D0%B4%D0%B7%D0%B8%D0%BD%D0%B0%D0%B4".
+    
+    Example of a properly encoded URL:
+    ```
+    /lookup/%D0%B1%D0%B0%D1%81%D1%82%D0%B4%D0%B7%D0%B8%D0%BD%D0%B0%D0%B4?dictionaries=iron-rus_v16
+    ```
+    
+    ## Filtering Dictionaries
+    
+    There are two ways to filter dictionaries:
+    
+    1. Using separate parameters (do NOT use square brackets):
+       ```
+       /lookup/word?dictionaries=dict1&dictionaries=dict2
+       ```
+    
+    2. Using a comma-separated list:
+       ```
+       /lookup/word?dict_list=dict1,dict2
+       ```
+    
+    ## Available Endpoints
+    
+    - `/lookup/{word}` - Direct dictionary lookup for single or multiple words
+    - `/search?query=word` - Search within dictionary entries
+    - `/prefix-search/{prefix}` - Find words starting with a prefix
+    - `/dictionaries` - List all available dictionaries
+    - `/list-entries` - Browse dictionary entries with pagination
+    
+    ## The API supports multiple output formats:
     - Structured output with parsed DSL markup (default)
     - Cleaned markup text with simplified representation
     - Raw dictionary format with original DSL markup
@@ -46,8 +78,10 @@ info:
     url: https://opensource.org/licenses/MIT
 
 servers:
-  - url: "https://192.168.1.30:8000"
+  - url: "http://192.168.1.30:8000"
     description: Ossetian Dictionaries OpenAPI point
+  - url: "http://localhost:8000"
+    description: Local development server
 
 tags:
   - name: Dictionaries
@@ -157,6 +191,37 @@ paths:
         advantage of cleaner URLs and consistent parameter handling.
         
         Returns the complete article with all linguistic data for each matched word.
+        
+        ## URL Encoding
+        Spaces and non-ASCII characters MUST be properly URL-encoded.
+        
+        ## Example Requests
+        
+        Single word lookup:
+        ```
+        GET /lookup/hello?dictionaries=rus-iron_v16
+        ```
+        
+        Multi-word lookup with URL encoding:
+        ```
+        GET /lookup/hello%20world?dictionaries=rus-iron_v16
+        ```
+        
+        Lookup with dictionary filtering (two ways):
+        ```
+        GET /lookup/word?dictionaries=iron-rus_v16&dictionaries=rus-iron_v16
+        GET /lookup/word?dict_list=iron-rus_v16,rus-iron_v16
+        ```
+        
+        Complete example with multiple parameters:
+        ```
+        GET /lookup/word?dictionaries=iron-rus_v16&exact_match=true&clean_markup=true&html_output=true
+        ```
+        
+        CURL example:
+        ```
+        curl -X GET "http://localhost:8000/lookup/hello?dictionaries=rus-iron_v16" -H "accept: application/json"
+        ```
       operationId: lookupWord
       parameters:
         - name: word
@@ -266,6 +331,37 @@ paths:
       description: |
         Search for words or phrases across dictionaries.
         This can search in headwords or definitions based on the exact_match parameter.
+        
+        ## URL Encoding
+        The query parameter and all non-ASCII characters MUST be properly URL-encoded.
+        
+        ## Example Requests
+        
+        Basic search:
+        ```
+        GET /search?query=hello
+        ```
+        
+        Search with dictionary filtering (two ways):
+        ```
+        GET /search?query=hello&dictionaries=rus-iron_v16&dictionaries=iron-rus_v16
+        GET /search?query=hello&dict_list=rus-iron_v16,iron-rus_v16
+        ```
+        
+        Search within definitions with result limit:
+        ```
+        GET /search?query=world&exact_match=false&limit=5
+        ```
+        
+        Complete example with multiple parameters:
+        ```
+        GET /search?query=hello&dictionaries=rus-iron_v16&exact_match=false&limit=20&html_output=true
+        ```
+        
+        CURL example:
+        ```
+        curl -X GET "http://localhost:8000/search?query=hello&dictionaries=rus-iron_v16" -H "accept: application/json"
+        ```
       operationId: searchWord
       parameters:
         - name: query
@@ -366,6 +462,37 @@ paths:
         - Finding all words starting with a specific prefix
         
         Results are limited by the limit parameter (default: 10).
+        
+        ## URL Encoding
+        The prefix parameter and all non-ASCII characters MUST be properly URL-encoded.
+        
+        ## Example Requests
+        
+        Basic prefix search:
+        ```
+        GET /prefix-search/a
+        ```
+        
+        Search with dictionary filtering (two ways):
+        ```
+        GET /prefix-search/a?dictionaries=rus-iron_v16&dictionaries=iron-rus_v16
+        GET /prefix-search/a?dict_list=rus-iron_v16,iron-rus_v16
+        ```
+        
+        Prefix search with increased limit:
+        ```
+        GET /prefix-search/b?limit=20
+        ```
+        
+        Complete example with multiple parameters:
+        ```
+        GET /prefix-search/c?dictionaries=rus-iron_v16&limit=15&html_output=true
+        ```
+        
+        CURL example:
+        ```
+        curl -X GET "http://localhost:8000/prefix-search/a?dictionaries=rus-iron_v16" -H "accept: application/json"
+        ```
       operationId: prefixSearch
       parameters:
         - name: prefix
@@ -450,7 +577,36 @@ paths:
       tags:
         - Dictionary Lookup
       summary: List entries from dictionaries
-      description: List entries from dictionaries with pagination support
+      description: |
+        List entries from dictionaries with pagination support.
+        This endpoint is useful for browsing all entries in a dictionary.
+        
+        ## Example Requests
+        
+        List entries from all dictionaries (first page):
+        ```
+        GET /list-entries
+        ```
+        
+        List entries from a specific dictionary:
+        ```
+        GET /list-entries?dict_name=rus-iron_v16
+        ```
+        
+        Paginated listing:
+        ```
+        GET /list-entries?dict_name=rus-iron_v16&page=2&page_size=30
+        ```
+        
+        Complete example with multiple parameters:
+        ```
+        GET /list-entries?dict_name=rus-iron_v16&page=3&page_size=50&html_output=true
+        ```
+        
+        CURL example:
+        ```
+        curl -X GET "http://localhost:8000/list-entries?dict_name=rus-iron_v16&page=1" -H "accept: application/json"
+        ```
       operationId: listEntries
       parameters:
         - name: dict_name
