@@ -1,0 +1,687 @@
+openapi: 3.1.0
+info:
+  title: Dictionary API
+  description: |
+    OpenAPI server for dictionary lookups with comprehensive linguistic data.
+    
+    This API provides access to DSL dictionaries with full preservation of linguistic features
+    such as stresses, conjugations, declensions, and other metadata.
+    
+    The API supports multiple output formats:
+    - Structured output with parsed DSL markup (default)
+    - Cleaned markup text with simplified representation
+    - Raw dictionary format with original DSL markup
+    - HTML output for better display in browsers and JSON viewers
+    - Readable text for non-Latin alphabets
+  version: 1.0.0
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8001
+    description: Local development server
+
+tags:
+  - name: Dictionaries
+    description: Operations for listing and retrieving dictionary information
+  - name: Dictionary Lookup
+    description: Operations for looking up words and phrases in dictionaries
+  - name: System
+    description: System and health check operations
+
+paths:
+  /:
+    get:
+      tags:
+        - System
+      summary: Redirect to API documentation
+      description: Redirects to the Swagger UI documentation page
+      operationId: redirectToApiDocs
+      responses:
+        '307':
+          description: Temporary redirect to documentation
+          headers:
+            Location:
+              schema:
+                type: string
+              description: URL of the API documentation
+
+  /health:
+    get:
+      tags:
+        - System
+      summary: Health check endpoint
+      description: Returns the health status of the API
+      operationId: healthCheck
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ok"
+
+  /dictionaries:
+    get:
+      tags:
+        - Dictionaries
+      summary: List all available dictionaries
+      description: Returns a list of all available dictionaries with their statistics
+      operationId: listDictionaries
+      responses:
+        '200':
+          description: Successfully retrieved dictionary list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DictionaryList'
+        '500':
+          description: Dictionaries not loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /lookup/{word}:
+    get:
+      tags:
+        - Dictionary Lookup
+      summary: Look up a word or phrase
+      description: |
+        Look up a word or phrase in the dictionaries.
+        Returns the complete article with all linguistic data.
+      operationId: lookupWord
+      parameters:
+        - name: word
+          in: path
+          description: The word or phrase to look up
+          required: true
+          schema:
+            type: string
+        - name: dictionaries
+          in: query
+          description: Filter results to specific dictionaries
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+        - name: exact_match
+          in: query
+          description: Whether to perform exact matching or allow partial matches
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - name: clean_markup
+          in: query
+          description: Whether to clean DSL markup tags (like [p], [trn], [com]) in definitions by removing them or converting to simple text. Set to false to see the raw dictionary format.
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - name: structured
+          in: query
+          description: Whether to return structured data with parsed DSL markup into separate fields for meanings, translations, etc. Default is True for structured output, set to False for simple format.
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - name: readable_text
+          in: query
+          description: Whether to return readable Unicode text instead of escaped characters (helpful for non-Latin alphabets)
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: html_output
+          in: query
+          description: Whether to convert DSL markup to HTML for better display in browsers and JSON viewers. When set to true, this takes precedence over clean_markup.
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Successfully retrieved dictionary entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WordLookupResponse'
+        '404':
+          description: No entries found for the given word
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /multi-lookup:
+    get:
+      tags:
+        - Dictionary Lookup
+      summary: Look up multiple words or phrases
+      description: |
+        Look up multiple words or phrases in the dictionaries.
+        Returns complete articles for each word.
+      operationId: multiWordLookup
+      parameters:
+        - name: query
+          in: query
+          description: Space-separated words to look up
+          required: true
+          schema:
+            type: string
+        - name: dictionaries
+          in: query
+          description: Filter results to specific dictionaries
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+        - name: clean_markup
+          in: query
+          description: Whether to clean DSL markup tags (like [p], [trn], [com]) in definitions by removing them or converting to simple text
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - name: structured
+          in: query
+          description: Whether to return structured data with parsed DSL markup into separate fields for meanings, translations, etc. Default is True for structured output, set to False for simple format.
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - name: readable_text
+          in: query
+          description: Whether to return readable Unicode text instead of escaped characters (helpful for non-Latin alphabets)
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: html_output
+          in: query
+          description: Whether to convert DSL markup to HTML for better display in browsers and JSON viewers. When set to true, this takes precedence over clean_markup.
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Successfully retrieved dictionary entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WordLookupResponse'
+        '404':
+          description: No entries found for the given query
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /search:
+    get:
+      tags:
+        - Dictionary Lookup
+      summary: Search for words or phrases
+      description: |
+        Search for words or phrases across dictionaries.
+        This can search in headwords or definitions based on the exact_match parameter.
+      operationId: searchWord
+      parameters:
+        - name: query
+          in: query
+          description: Search query to find in dictionary entries
+          required: true
+          schema:
+            type: string
+        - name: dictionaries
+          in: query
+          description: Filter results to specific dictionaries
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+        - name: exact_match
+          in: query
+          description: Whether to perform exact word matching or search within definitions
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: clean_markup
+          in: query
+          description: Whether to clean DSL markup tags (like [p], [trn], [com]) in definitions by removing them or converting to simple text
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - name: structured
+          in: query
+          description: Whether to return structured data with parsed DSL markup into separate fields for meanings, translations, etc. Default is True for structured output, set to False for simple format.
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - name: limit
+          in: query
+          description: Maximum number of entries to return
+          required: false
+          schema:
+            type: integer
+            default: 10
+        - name: readable_text
+          in: query
+          description: Whether to return readable Unicode text instead of escaped characters (helpful for non-Latin alphabets)
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: html_output
+          in: query
+          description: Whether to convert DSL markup to HTML for better display in browsers and JSON viewers. When set to true, this takes precedence over clean_markup.
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Successfully retrieved search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WordLookupResponse'
+        '404':
+          description: No entries found for the given search query
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /prefix-search/{prefix}:
+    get:
+      tags:
+        - Dictionary Lookup
+      summary: Find entries starting with a prefix
+      description: Find dictionary entries that start with the given prefix
+      operationId: prefixSearch
+      parameters:
+        - name: prefix
+          in: path
+          description: Prefix to search for
+          required: true
+          schema:
+            type: string
+        - name: dictionaries
+          in: query
+          description: Filter results to specific dictionaries
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+        - name: clean_markup
+          in: query
+          description: Whether to clean DSL markup tags (like [p], [trn], [com]) in definitions by removing them or converting to simple text
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - name: structured
+          in: query
+          description: Whether to return structured data with parsed DSL markup into separate fields for meanings, translations, etc. Default is True for structured output, set to False for simple format.
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - name: limit
+          in: query
+          description: Maximum number of entries to return
+          required: false
+          schema:
+            type: integer
+            default: 10
+        - name: readable_text
+          in: query
+          description: Whether to return readable Unicode text instead of escaped characters (helpful for non-Latin alphabets)
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: html_output
+          in: query
+          description: Whether to convert DSL markup to HTML for better display in browsers and JSON viewers. When set to true, this takes precedence over clean_markup.
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Successfully retrieved entries starting with the prefix
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WordLookupResponse'
+        '404':
+          description: No entries found starting with the given prefix
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /list-entries:
+    get:
+      tags:
+        - Dictionary Lookup
+      summary: List entries from dictionaries
+      description: List entries from dictionaries with pagination support
+      operationId: listEntries
+      parameters:
+        - name: dict_name
+          in: query
+          description: Dictionary to list entries from. If not provided, lists from all dictionaries.
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          description: Page number for pagination
+          required: false
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: page_size
+          in: query
+          description: Number of entries per page
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: clean_markup
+          in: query
+          description: Whether to clean DSL markup tags (like [p], [trn], [com]) in definitions by removing them or converting to simple text
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - name: structured
+          in: query
+          description: Whether to return structured data with parsed DSL markup into separate fields for meanings, translations, etc. Default is True for structured output, set to False for simple format.
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - name: readable_text
+          in: query
+          description: Whether to return readable Unicode text instead of escaped characters (helpful for non-Latin alphabets)
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: html_output
+          in: query
+          description: Whether to convert DSL markup to HTML for better display in browsers and JSON viewers. When set to true, this takes precedence over clean_markup.
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Successfully retrieved paginated entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedEntriesResponse'
+        '404':
+          description: Dictionary not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    Error:
+      type: object
+      properties:
+        detail:
+          type: string
+          description: Error message details
+      required:
+        - detail
+
+    DictionaryInfo:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Dictionary name
+        entry_count:
+          type: integer
+          description: Number of entries in the dictionary
+        description:
+          type: string
+          nullable: true
+          description: Dictionary description
+        language_from:
+          type: string
+          description: Source language
+        language_to:
+          type: string
+          nullable: true
+          description: Target language for bilingual dictionaries
+        file_size:
+          type: integer
+          description: Dictionary file size in bytes
+      required:
+        - name
+        - entry_count
+        - language_from
+        - file_size
+
+    DictionaryList:
+      type: object
+      properties:
+        dictionaries:
+          type: array
+          items:
+            $ref: '#/components/schemas/DictionaryInfo'
+          description: List of available dictionaries
+        total_count:
+          type: integer
+          description: Total number of dictionaries
+      required:
+        - dictionaries
+        - total_count
+
+    PartOfSpeech:
+      type: object
+      properties:
+        value:
+          type: string
+          description: Part of speech value (e.g., noun, verb)
+        abbreviation:
+          type: string
+          nullable: true
+          description: Abbreviation (e.g., n., v.)
+      required:
+        - value
+
+    Translation:
+      type: object
+      properties:
+        text:
+          type: string
+          description: Translation text
+        examples:
+          type: array
+          items:
+            type: string
+          nullable: true
+          description: Usage examples
+      required:
+        - text
+
+    Meaning:
+      type: object
+      properties:
+        number:
+          type: integer
+          nullable: true
+          description: Meaning number for words with multiple meanings
+        definition:
+          type: string
+          nullable: true
+          description: Definition text
+        look_for:
+          type: array
+          items:
+            type: string
+          nullable: true
+          description: Words or phrases to look up as cross-references
+        translations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Translation'
+          nullable: true
+          description: Translations
+        examples:
+          type: array
+          items:
+            type: string
+          nullable: true
+          description: Usage examples
+
+    StructuredWordEntry:
+      type: object
+      properties:
+        word:
+          type: string
+          description: The word or phrase
+        dictionary:
+          type: string
+          description: Source dictionary name
+        part_of_speech:
+          type: array
+          items:
+            $ref: '#/components/schemas/PartOfSpeech'
+          nullable: true
+          description: Parts of speech
+        meanings:
+          type: array
+          items:
+            $ref: '#/components/schemas/Meaning'
+          nullable: true
+          description: Word meanings
+        pronunciation:
+          type: string
+          nullable: true
+          description: Pronunciation
+        etymology:
+          type: string
+          nullable: true
+          description: Etymology information
+        html_definition:
+          type: string
+          description: HTML-formatted definition with all linguistic data
+      required:
+        - word
+        - dictionary
+        - html_definition
+
+    WordEntry:
+      type: object
+      properties:
+        word:
+          type: string
+          description: The word or phrase
+        dictionary:
+          type: string
+          description: Source dictionary name
+        definition:
+          description: Complete definition with all linguistic data
+      required:
+        - word
+        - dictionary
+        - definition
+
+    WordLookupResponse:
+      type: object
+      properties:
+        entries:
+          type: array
+          items:
+            oneOf:
+              - $ref: '#/components/schemas/WordEntry'
+              - $ref: '#/components/schemas/StructuredWordEntry'
+          description: List of matching entries
+        query:
+          type: string
+          description: Original query
+        count:
+          type: integer
+          description: Number of entries found
+        dictionaries_searched:
+          type: array
+          items:
+            type: string
+          description: Names of dictionaries searched
+        time_taken:
+          type: number
+          format: float
+          description: Time taken for the lookup in seconds
+      required:
+        - entries
+        - query
+        - count
+        - dictionaries_searched
+        - time_taken
+
+    PaginatedEntriesResponse:
+      type: object
+      properties:
+        entries:
+          type: array
+          items:
+            oneOf:
+              - $ref: '#/components/schemas/WordEntry'
+              - $ref: '#/components/schemas/StructuredWordEntry'
+          description: List of entries
+        total_count:
+          type: integer
+          description: Total number of entries
+        page:
+          type: integer
+          description: Current page number
+        page_size:
+          type: integer
+          description: Number of entries per page
+        has_next:
+          type: boolean
+          description: Whether there are more entries to fetch
+        dictionary:
+          type: string
+          nullable: true
+          description: Dictionary that was queried
+        time_taken:
+          type: number
+          format: float
+          description: Time taken for the lookup in seconds
+      required:
+        - entries
+        - total_count
+        - page
+        - page_size
+        - has_next
+        - time_taken 

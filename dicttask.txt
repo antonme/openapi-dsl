@@ -1,0 +1,20 @@
+Task:
+
+You need to write an OpenAPI server that serves dictionaries.
+The dictionaries itself are now in dsl dictionary (see docs at https://anatoly314.github.io/dsl-manual/), but you are free to convert them to any format you consider fit for task.
+
+The reply should be:
+  - fast
+  - include all of dictionary data
+  - support stresses, conjugations, declensions, cases, syllables, roots, inflections etc
+  - support parts of speech etc
+  - all of the data that is in the original dicts, should be in answers
+  - the answer should be easily machine-readeable for anyone who supports OpenAPI, so simple ubiquitious codecs etc
+  - there should be a handle to list available dictionaries and their basic stats
+
+
+Before finishing:
+  - check that the server works and answers
+  - check that it can find a word (for example абажур) in dicts
+  - the answer should be faster than 0.5s
+  - check that the answer is full
