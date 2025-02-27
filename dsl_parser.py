@@ -21,8 +21,9 @@ class DSLParser:
     
     def parse_header(self, dsl_file: Path) -> Dict[str, Any]:
         """Parse the header of a DSL file to extract metadata"""
+        file_stem = dsl_file.stem
         info = {
-            "name": dsl_file.stem,
+            "name": file_stem,
             "file_size": dsl_file.stat().st_size,
             "language_from": "",
             "language_to": None,
@@ -30,26 +31,75 @@ class DSLParser:
             "entry_count": 0,
         }
         
+        # Create a human-readable display name from the filename
+        # Replace hyphens with arrows for language pairs and clean up underscores
+        display_name = file_stem.replace("-", " → ").replace("_", " ")
+        # Capitalize words
+        display_name = " ".join(word.capitalize() for word in display_name.split())
+        info["display_name"] = display_name
+        
         # Try to find matching .ann file for additional metadata
         ann_file = dsl_file.with_suffix(".ann")
         if ann_file.exists():
             try:
-                with open(ann_file, 'r', encoding='utf-8') as f:
-                    for line in f:
-                        if line.startswith("#NAME"):
-                            info["name"] = line[6:].strip().strip('"')
-                        elif line.startswith("#INDEX_LANGUAGE"):
-                            info["language_from"] = line[16:].strip().strip('"')
-                        elif line.startswith("#CONTENTS_LANGUAGE"):
-                            info["language_to"] = line[19:].strip().strip('"')
-                        elif line.startswith("#DESCRIPTION"):
-                            info["description"] = line[13:].strip().strip('"')
+                # Detect encoding - first try utf-16le, which is commonly used for .ann files
+                encodings_to_try = ['utf-16le', 'utf-8', 'windows-1251', 'latin-1']
+                
+                # Try each encoding until one works
+                for encoding in encodings_to_try:
+                    try:
+                        with open(ann_file, 'r', encoding=encoding) as f:
+                            content = f.read()
+                        
+                        # If we got here, the encoding worked
+                        logger.info(f"Successfully read {ann_file} with {encoding} encoding")
+                        
+                        # Store the first few lines (or all content if it's small) as annotation_text
+                        # This will be used as description if no #DESCRIPTION directive is found
+                        lines = content.splitlines()
+                        annotation_text = "\n".join(lines[:20] if len(lines) > 20 else lines)
+                        
+                        # Reset description from annotation
+                        description_from_directive = None
+                        
+                        # Process the content line by line
+                        for line in lines:
+                            if line.startswith("#NAME"):
+                                # Use the #NAME from the annotation file as the display_name
+                                name_value = line[6:].strip().strip('"')
+                                info["display_name"] = name_value
+                            elif line.startswith("#INDEX_LANGUAGE"):
+                                info["language_from"] = line[16:].strip().strip('"')
+                            elif line.startswith("#CONTENTS_LANGUAGE"):
+                                info["language_to"] = line[19:].strip().strip('"')
+                            elif line.startswith("#DESCRIPTION"):
+                                description_from_directive = line[13:].strip().strip('"')
+                        
+                        # Use #DESCRIPTION directive value if found, otherwise use annotation text
+                        if description_from_directive:
+                            info["description"] = description_from_directive
+                        else:
+                            # Filter out lines that are directives or empty
+                            description_lines = [line for line in lines 
+                                               if not line.startswith('#') and line.strip()]
+                            if description_lines:
+                                # Use the first 10 lines as description
+                                info["description"] = "\n".join(description_lines[:10])
+                        
+                        # No need to try other encodings if this one worked
+                        break
+                    except UnicodeDecodeError:
+                        # Try the next encoding
+                        continue
+                    except Exception as e:
+                        logger.warning(f"Error reading annotation file {ann_file} with {encoding} encoding: {e}")
+                        continue
             except Exception as e:
                 logger.warning(f"Error reading annotation file {ann_file}: {e}")
         
         # If language info is still missing, try to infer from filename
         if not info["language_from"]:
-            name_parts = dsl_file.stem.split('-')
+            name_parts = file_stem.split('-')
             if len(name_parts) > 1:
                 info["language_from"] = name_parts[0]
                 info["language_to"] = name_parts[1]
@@ -65,7 +115,7 @@ class DSLParser:
         """
         logger.info(f"Parsing DSL file: {dsl_file}")
         
-        # Get dictionary info from header
+        # Get initial dictionary info from header
         dict_info = self.parse_header(dsl_file)
         dict_name = dict_info["name"]
         
@@ -75,58 +125,111 @@ class DSLParser:
         current_definition = []
         entry_count = 0
         
-        try:
-            with open(dsl_file, 'r', encoding='utf-16-le') as f:
-                # Skip BOM if present
-                first_char = f.read(1)
-                if first_char != '\ufeff':
-                    f.seek(0)
-                
-                in_header = True
-                
-                for line in f:
-                    line = line.rstrip()
+        # DSL files are typically in UTF-16-LE encoding, but let's try to detect it
+        encodings_to_try = ['utf-16-le', 'utf-8', 'windows-1251', 'latin-1']
+        
+        for encoding in encodings_to_try:
+            try:
+                with open(dsl_file, 'r', encoding=encoding) as f:
+                    # Try to read a bit of the file to test encoding
+                    f.read(100)
                     
-                    # Skip empty lines
-                    if not line:
-                        continue
+                    # If we got here, encoding is likely correct
+                    logger.info(f"Using {encoding} encoding for {dsl_file}")
                     
-                    # Check if we're still in the header
-                    if in_header:
-                        if line.startswith('#'):
-                            # Process header lines if needed
-                            continue
-                        else:
-                            in_header = False
-                    
-                    # If line is not indented, it's a headword
-                    if not line.startswith('\t'):
-                        # Save the previous entry if exists
-                        if current_headword is not None:
-                            entries[current_headword] = '\n'.join(current_definition)
-                            entry_count += 1
+                    # Reopen the file with the detected encoding
+                    with open(dsl_file, 'r', encoding=encoding) as f:
+                        # Skip BOM if present
+                        first_char = f.read(1)
+                        if first_char != '\ufeff':
+                            f.seek(0)
                         
-                        # Start a new entry
-                        current_headword = line
-                        current_definition = []
-                    else:
-                        # Add to the current definition (remove the tab)
-                        current_definition.append(line[1:])
-            
-            # Add the last entry
-            if current_headword is not None:
-                entries[current_headword] = '\n'.join(current_definition)
-                entry_count += 1
-            
-            # Update entry count in dictionary info
-            dict_info["entry_count"] = entry_count
-            
-            logger.info(f"Parsed {entry_count} entries from {dict_name}")
-            return dict_info, entries
-            
-        except Exception as e:
-            logger.error(f"Error parsing DSL file {dsl_file}: {e}")
-            return dict_info, {}
+                        in_header = True
+                        header_lines = []
+                        
+                        for line in f:
+                            line = line.rstrip()
+                            
+                            # Skip empty lines
+                            if not line:
+                                continue
+                            
+                            # Check if we're still in the header
+                            if in_header:
+                                if line.startswith('#'):
+                                    # Collect header lines for potential description
+                                    header_lines.append(line)
+                                    
+                                    # Process header directives
+                                    if line.startswith("#NAME"):
+                                        # Extract the display name from the #NAME directive
+                                        name_value = line[5:].strip().strip('"')
+                                        dict_info["display_name"] = name_value
+                                        logger.info(f"Found #NAME directive in DSL file: {name_value}")
+                                    elif line.startswith("#INDEX_LANGUAGE"):
+                                        language_from = line[16:].strip().strip('"')
+                                        dict_info["language_from"] = language_from
+                                    elif line.startswith("#CONTENTS_LANGUAGE"):
+                                        language_to = line[19:].strip().strip('"')
+                                        dict_info["language_to"] = language_to
+                                    elif line.startswith("#DESCRIPTION"):
+                                        description = line[13:].strip().strip('"')
+                                        if not dict_info["description"]:  # Only set if not already set from .ann file
+                                            dict_info["description"] = description
+                                    continue
+                                else:
+                                    # If we get here, we're out of the header section
+                                    in_header = False
+                                    
+                                    # If no description is set yet, use the header information
+                                    if not dict_info["description"] and header_lines:
+                                        # Filter out directive lines and get meaningful content
+                                        non_directive_lines = [l for l in header_lines if not any(
+                                            l.startswith(d) for d in 
+                                            ["#NAME", "#INDEX_LANGUAGE", "#CONTENTS_LANGUAGE", 
+                                             "#DESCRIPTION", "#ICON_FILE"])]
+                                        
+                                        if non_directive_lines:
+                                            # Use remaining header content as description
+                                            dict_info["description"] = "\n".join(
+                                                l.strip('#').strip() for l in non_directive_lines[:5]
+                                            )
+                            
+                            # If line is not indented, it's a headword
+                            if not line.startswith('\t'):
+                                # Save the previous entry if exists
+                                if current_headword is not None:
+                                    entries[current_headword] = '\n'.join(current_definition)
+                                    entry_count += 1
+                                
+                                # Start a new entry
+                                current_headword = line
+                                current_definition = []
+                            else:
+                                # Add to the current definition (remove the tab)
+                                current_definition.append(line[1:])
+                    
+                    # Add the last entry
+                    if current_headword is not None:
+                        entries[current_headword] = '\n'.join(current_definition)
+                        entry_count += 1
+                    
+                    # Update entry count in dictionary info
+                    dict_info["entry_count"] = entry_count
+                    
+                    logger.info(f"Parsed {entry_count} entries from {dict_name}")
+                    return dict_info, entries
+                    
+            except UnicodeDecodeError:
+                # Try next encoding
+                continue
+            except Exception as e:
+                logger.error(f"Error parsing DSL file {dsl_file} with {encoding} encoding: {e}")
+                continue
+        
+        # If we get here, none of the encodings worked
+        logger.error(f"Failed to determine encoding for DSL file {dsl_file}")
+        return dict_info, {}
     
     def parse_all_dictionaries(self) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, Dict[str, Any]]]:
         """

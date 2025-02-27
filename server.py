@@ -126,18 +126,39 @@ dictionary_info = {}
 # Inverted index for faster word lookup across dictionaries
 inverted_index = {}
 
+# Helper function to safely get display names
+def get_display_name(dict_name):
+    """Helper function to get the display name of a dictionary safely"""
+    # Check dictionary_info for display_name
+    if dict_name in dictionary_info and "display_name" in dictionary_info[dict_name]:
+        return dictionary_info[dict_name]["display_name"]
+    
+    return dict_name  # Fallback to the dictionary name if display_name is not available
+
 # Response models for API
 class DictionaryInfo(BaseModel):
     name: str = Field(..., description="Dictionary name")
+    display_name: str = Field(..., description="Human-readable dictionary name")
     entry_count: int = Field(..., description="Number of entries in the dictionary")
     description: Optional[str] = Field(None, description="Dictionary description")
     language_from: str = Field(..., description="Source language")
     language_to: Optional[str] = Field(None, description="Target language for bilingual dictionaries")
     file_size: int = Field(..., description="Dictionary file size in bytes")
 
+class DictionaryStats(BaseModel):
+    total_entries: int = Field(..., description="Total number of entries across all dictionaries")
+    total_size_bytes: int = Field(..., description="Total size of all dictionaries in bytes")
+    average_entries_per_dictionary: float = Field(..., description="Average number of entries per dictionary")
+    largest_dictionary: Optional[str] = Field(None, description="Name of the dictionary with the most entries")
+    smallest_dictionary: Optional[str] = Field(None, description="Name of the dictionary with the fewest entries")
+
 class DictionaryList(BaseModel):
     dictionaries: List[DictionaryInfo] = Field(..., description="List of available dictionaries")
     total_count: int = Field(..., description="Total number of dictionaries")
+    statistics: Optional[DictionaryStats] = Field(None, description="Additional statistics about the dictionaries")
+    
+    class Config:
+        exclude_none = True
 
 class PartOfSpeech(BaseModel):
     value: str = Field(..., description="Part of speech value (e.g., noun, verb)")
@@ -170,11 +191,12 @@ class Meaning(BaseModel):
 class StructuredWordEntry(BaseModel):
     word: str = Field(..., description="The word or phrase")
     dictionary: str = Field(..., description="Source dictionary name")
+    dictionary_display_name: str = Field(..., description="Human-readable dictionary name")
     part_of_speech: Optional[List[PartOfSpeech]] = Field(None, description="Parts of speech")
     meanings: Optional[List[Meaning]] = Field(None, description="Word meanings")
     pronunciation: Optional[str] = Field(None, description="Pronunciation")
     etymology: Optional[str] = Field(None, description="Etymology information")
-    html_definition: str = Field(..., description="HTML-formatted definition with all linguistic data (DSL tags converted to HTML)")
+    html_definition: str = Field(..., description="HTML-formatted definition with all linguistic data")
     
     class Config:
         exclude_none = True
@@ -182,6 +204,7 @@ class StructuredWordEntry(BaseModel):
 class WordEntry(BaseModel):
     word: str = Field(..., description="The word or phrase")
     dictionary: str = Field(..., description="Source dictionary name")
+    dictionary_display_name: str = Field(..., description="Human-readable dictionary name")
     definition: Any = Field(..., description="Complete definition with all linguistic data")
     
     class Config:
@@ -415,15 +438,48 @@ async def list_dictionaries():
     """
     List all available dictionaries with their statistics
     """
-    if not dictionary_info:
-        raise HTTPException(status_code=500, detail="Dictionaries not loaded")
-    
-    dict_list = [DictionaryInfo(**info) for info in dictionary_info.values()]
-    
-    return DictionaryList(
-        dictionaries=dict_list,
-        total_count=len(dict_list)
-    )
+    try:
+        if not dictionary_info:
+            raise HTTPException(status_code=500, detail="Dictionaries not loaded")
+        
+        logger.info(f"Creating dictionary list with {len(dictionary_info)} dictionaries")
+        dict_list = []
+        for info in dictionary_info.values():
+            # Ensure all required fields are present
+            if "display_name" not in info:
+                info["display_name"] = info["name"]
+            dict_list.append(DictionaryInfo(**info))
+        
+        # Calculate additional statistics
+        total_entries = sum(info.entry_count for info in dict_list)
+        total_size = sum(info.file_size for info in dict_list)
+        avg_entries = total_entries / len(dict_list) if dict_list else 0
+        
+        # Find largest and smallest dictionaries
+        largest_dict = None
+        smallest_dict = None
+        if dict_list:
+            largest_dict = max(dict_list, key=lambda x: x.entry_count).display_name
+            smallest_dict = min(dict_list, key=lambda x: x.entry_count).display_name
+        
+        # Create the response with statistics
+        response = DictionaryList(
+            dictionaries=dict_list,
+            total_count=len(dict_list),
+            statistics=DictionaryStats(
+                total_entries=total_entries,
+                total_size_bytes=total_size,
+                average_entries_per_dictionary=round(avg_entries, 2),
+                largest_dictionary=largest_dict,
+                smallest_dictionary=smallest_dict
+            )
+        )
+        
+        logger.info(f"Successfully created dictionary list with {len(dict_list)} dictionaries")
+        return response
+    except Exception as e:
+        logger.error(f"Error in list_dictionaries: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error listing dictionaries: {str(e)}")
 
 @app.get("/lookup/{word}", response_model=WordLookupResponse, tags=["Dictionary Lookup"])
 async def lookup_word(
@@ -468,6 +524,7 @@ async def lookup_word(
                         entries.append(StructuredWordEntry(
                             word=original_headword,
                             dictionary=dict_name,
+                            dictionary_display_name=get_display_name(dict_name),
                             **structure_data
                         ))
                     else:
@@ -479,6 +536,7 @@ async def lookup_word(
                         entries.append(WordEntry(
                             word=original_headword,
                             dictionary=dict_name,
+                            dictionary_display_name=get_display_name(dict_name),
                             definition=definition
                         ))
     else:
@@ -502,6 +560,7 @@ async def lookup_word(
                         entries.append(StructuredWordEntry(
                             word=headword,
                             dictionary=dict_name,
+                            dictionary_display_name=get_display_name(dict_name),
                             **structure_data
                         ))
                     else:
@@ -513,6 +572,7 @@ async def lookup_word(
                         entries.append(WordEntry(
                             word=headword,
                             dictionary=dict_name,
+                            dictionary_display_name=get_display_name(dict_name),
                             definition=definition
                         ))
     
@@ -539,6 +599,7 @@ async def lookup_word(
                         entries.append(StructuredWordEntry(
                             word=headword,
                             dictionary=dict_name,
+                            dictionary_display_name=get_display_name(dict_name),
                             **structure_data
                         ))
                     else:
@@ -550,6 +611,7 @@ async def lookup_word(
                         entries.append(WordEntry(
                             word=headword,
                             dictionary=dict_name,
+                            dictionary_display_name=get_display_name(dict_name),
                             definition=definition
                         ))
     
@@ -615,6 +677,7 @@ async def multi_word_lookup(
                         entries.append(StructuredWordEntry(
                             word=original_headword,
                             dictionary=dict_name,
+                            dictionary_display_name=get_display_name(dict_name),
                             **structure_data
                         ))
                     else:
@@ -626,6 +689,7 @@ async def multi_word_lookup(
                         entries.append(WordEntry(
                             word=original_headword,
                             dictionary=dict_name,
+                            dictionary_display_name=get_display_name(dict_name),
                             definition=definition
                         ))
     
@@ -693,6 +757,7 @@ async def search_word(
                         entries.append(StructuredWordEntry(
                             word=headword,
                             dictionary=dict_name,
+                            dictionary_display_name=get_display_name(dict_name),
                             **structure_data
                         ))
                     else:
@@ -704,6 +769,7 @@ async def search_word(
                         entries.append(WordEntry(
                             word=headword,
                             dictionary=dict_name,
+                            dictionary_display_name=get_display_name(dict_name),
                             definition=definition
                         ))
                 
@@ -737,6 +803,7 @@ async def search_word(
                         entries.append(StructuredWordEntry(
                             word=headword,
                             dictionary=dict_name,
+                            dictionary_display_name=get_display_name(dict_name),
                             **structure_data
                         ))
                     else:
@@ -748,6 +815,7 @@ async def search_word(
                         entries.append(WordEntry(
                             word=headword,
                             dictionary=dict_name,
+                            dictionary_display_name=get_display_name(dict_name),
                             definition=definition
                         ))
                 
@@ -819,6 +887,7 @@ async def prefix_search(
                     entries.append(StructuredWordEntry(
                         word=headword,
                         dictionary=dict_name,
+                        dictionary_display_name=get_display_name(dict_name),
                         **structure_data
                     ))
                 else:
@@ -830,6 +899,7 @@ async def prefix_search(
                     entries.append(WordEntry(
                         word=headword,
                         dictionary=dict_name,
+                        dictionary_display_name=get_display_name(dict_name),
                         definition=definition
                     ))
             
@@ -894,6 +964,7 @@ async def list_entries(
                 all_entries.append(StructuredWordEntry(
                     word=headword,
                     dictionary=dict_name,
+                    dictionary_display_name=get_display_name(dict_name),
                     **structure_data
                 ))
             else:
@@ -905,6 +976,7 @@ async def list_entries(
                 all_entries.append(WordEntry(
                     word=headword,
                     dictionary=dict_name,
+                    dictionary_display_name=get_display_name(dict_name),
                     definition=definition
                 ))
     else:
@@ -921,6 +993,7 @@ async def list_entries(
                     all_entries.append(StructuredWordEntry(
                         word=headword,
                         dictionary=dictionary_name,
+                        dictionary_display_name=get_display_name(dictionary_name),
                         **structure_data
                     ))
                 else:
@@ -932,6 +1005,7 @@ async def list_entries(
                     all_entries.append(WordEntry(
                         word=headword,
                         dictionary=dictionary_name,
+                        dictionary_display_name=get_display_name(dictionary_name),
                         definition=definition
                     ))
     

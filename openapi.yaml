@@ -467,6 +467,9 @@ components:
         name:
           type: string
           description: Dictionary name
+        display_name:
+          type: string
+          description: Human-readable dictionary name
         entry_count:
           type: integer
           description: Number of entries in the dictionary
@@ -486,6 +489,7 @@ components:
           description: Dictionary file size in bytes
       required:
         - name
+        - display_name
         - entry_count
         - language_from
         - file_size
@@ -501,6 +505,26 @@ components:
         total_count:
           type: integer
           description: Total number of dictionaries
+        statistics:
+          type: object
+          properties:
+            total_entries:
+              type: integer
+              description: Total number of entries across all dictionaries
+            total_size_bytes:
+              type: integer
+              description: Total size of all dictionaries in bytes
+            average_entries_per_dictionary:
+              type: number
+              format: float
+              description: Average number of entries per dictionary
+            largest_dictionary:
+              type: string
+              description: Name of the dictionary with the most entries
+            smallest_dictionary:
+              type: string
+              description: Name of the dictionary with the fewest entries
+          description: Additional statistics about the dictionaries
       required:
         - dictionaries
         - total_count
@@ -572,6 +596,9 @@ components:
         dictionary:
           type: string
           description: Source dictionary name
+        dictionary_display_name:
+          type: string
+          description: Human-readable dictionary name
         part_of_speech:
           type: array
           items:
@@ -598,6 +625,7 @@ components:
       required:
         - word
         - dictionary
+        - dictionary_display_name
         - html_definition
 
     WordEntry:
@@ -609,11 +637,15 @@ components:
         dictionary:
           type: string
           description: Source dictionary name
+        dictionary_display_name:
+          type: string
+          description: Human-readable dictionary name
         definition:
           description: Complete definition with all linguistic data
       required:
         - word
         - dictionary
+        - dictionary_display_name
         - definition
 
     WordLookupResponse:
