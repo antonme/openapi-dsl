@@ -266,6 +266,13 @@ paths:
           schema:
             type: boolean
             default: true
+        - name: limit
+          in: query
+          description: Maximum number of entries to return (for multi-word queries, this limits the total results)
+          required: false
+          schema:
+            type: integer
+            default: 50
         - name: readable_text
           in: query
           description: Whether to return readable Unicode text instead of escaped characters (helpful for non-Latin alphabets)
@@ -409,7 +416,7 @@ paths:
           required: false
           schema:
             type: integer
-            default: 10
+            default: 50
         - name: readable_text
           in: query
           description: Whether to return readable Unicode text instead of escaped characters (helpful for non-Latin alphabets)
@@ -461,7 +468,7 @@ paths:
         - Browsing dictionaries by letter or partial word
         - Finding all words starting with a specific prefix
         
-        Results are limited by the limit parameter (default: 10).
+        Results are limited by the limit parameter (default: 50).
         
         ## URL Encoding
         The prefix parameter and all non-ASCII characters MUST be properly URL-encoded.
@@ -481,12 +488,12 @@ paths:
         
         Prefix search with increased limit:
         ```
-        GET /prefix-search/b?limit=20
+        GET /prefix-search/b?limit=100
         ```
         
         Complete example with multiple parameters:
         ```
-        GET /prefix-search/c?dictionaries=rus-iron_v16&limit=15&html_output=true
+        GET /prefix-search/c?dictionaries=rus-iron_v16&limit=25&html_output=true
         ```
         
         CURL example:
@@ -542,7 +549,7 @@ paths:
           required: false
           schema:
             type: integer
-            default: 10
+            default: 50
         - name: readable_text
           in: query
           description: Whether to return readable Unicode text instead of escaped characters (helpful for non-Latin alphabets)
@@ -595,7 +602,7 @@ paths:
         
         Paginated listing:
         ```
-        GET /list-entries?dict_name=rus-iron_v16&page=2&page_size=30
+        GET /list-entries?dict_name=rus-iron_v16&page=2&page_size=50
         ```
         
         Complete example with multiple parameters:
@@ -629,7 +636,7 @@ paths:
           required: false
           schema:
             type: integer
-            default: 20
+            default: 50
             minimum: 1
             maximum: 100
         - name: clean_markup

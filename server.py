@@ -542,6 +542,7 @@ async def lookup_word(
     exact_match: bool = Query(True, description="Whether to perform exact matching or allow partial matches"),
     clean_markup: bool = Query(True, description="Whether to clean DSL markup tags (like [p], [trn], [com]) in definitions by removing them or converting to simple text. Set to false to see the raw dictionary format."),
     structured: bool = Query(True, description="Whether to return structured data with parsed DSL markup into separate fields for meanings, translations, etc. Default is True for structured output, set to False for simple format."),
+    limit: int = Query(50, description="Maximum number of entries to return (for multi-word queries, this limits the total results)"),
     readable_text: bool = Query(False, description="Whether to return readable Unicode text instead of escaped characters (helpful for non-Latin alphabets)"),
     html_output: bool = Query(False, description="Whether to convert DSL markup to HTML for better display in browsers and JSON viewers. When set to true, this takes precedence over clean_markup."),
     include_references: bool = Query(True, description="Whether to include entries referenced in look_for sections (non-recursive)")
@@ -554,6 +555,7 @@ async def lookup_word(
     - For phrases (with spaces), it splits the input and looks up each word independently
     
     The endpoint always returns complete dictionary articles for each matched word.
+    Results are limited by the 'limit' parameter (default: 50).
     """
     start_time = time.time()
     
@@ -577,6 +579,10 @@ async def lookup_word(
                     dicts_searched.add(dict_name)
                     
                     for original_headword in headwords:
+                        # Check if we've reached the limit
+                        if len(entries) >= limit:
+                            break
+                            
                         definition = dictionaries[dict_name][original_headword]
                         
                         if structured:
@@ -604,6 +610,14 @@ async def lookup_word(
                                 dictionary_display_name=get_display_name(dict_name),
                                 definition=definition
                             ))
+                            
+                    # Check if we've reached the limit after processing this dictionary
+                    if len(entries) >= limit:
+                        break
+                        
+                # Check if we've reached the limit after processing this normalized word
+                if len(entries) >= limit:
+                    break
     else:
         # Single word lookup - original implementation
         # Normalize the word for lookup
@@ -620,6 +634,10 @@ async def lookup_word(
                     dicts_searched.add(dict_name)
                     
                     for original_headword in headwords:
+                        # Check if we've reached the limit
+                        if len(entries) >= limit:
+                            break
+                            
                         definition = dictionaries[dict_name][original_headword]
                         
                         if structured:
@@ -647,6 +665,10 @@ async def lookup_word(
                                 dictionary_display_name=get_display_name(dict_name),
                                 definition=definition
                             ))
+                            
+                        # Check if we've reached the limit after processing this dictionary
+                        if len(entries) >= limit:
+                            break
         else:
             # Partial match - look for words that contain the query
             for dict_name, dict_entries in dictionaries.items():
@@ -658,6 +680,10 @@ async def lookup_word(
                 
                 for headword, definition in dict_entries.items():
                     if norm_word in normalize_headword(headword):
+                        # Check if we've reached the limit
+                        if len(entries) >= limit:
+                            break
+                        
                         if structured:
                             # Parse structure before cleaning markup
                             structure_data = parse_dsl_structure(definition)
@@ -683,6 +709,10 @@ async def lookup_word(
                                 dictionary_display_name=get_display_name(dict_name),
                                 definition=definition
                             ))
+                            
+                        # Check if we've reached the limit after processing this dictionary
+                        if len(entries) >= limit:
+                            break
         
         # Check if we found anything
         if not entries:
@@ -697,6 +727,10 @@ async def lookup_word(
                 for headword, definition in dict_entries.items():
                     norm_headword = normalize_headword(headword)
                     if norm_word == norm_headword:
+                        # Check if we've reached the limit
+                        if len(entries) >= limit:
+                            break
+                        
                         if structured:
                             # Parse structure before cleaning markup
                             structure_data = parse_dsl_structure(definition)
@@ -722,6 +756,10 @@ async def lookup_word(
                                 dictionary_display_name=get_display_name(dict_name),
                                 definition=definition
                             ))
+                            
+                        # Check if we've reached the limit after processing this dictionary
+                        if len(entries) >= limit:
+                            break
     
     # Look up referenced entries if requested
     referenced_entries = []
@@ -758,6 +796,10 @@ async def lookup_word(
                     dicts_searched.add(dict_name)
                     
                     for original_headword in headwords:
+                        # Check if we've reached the limit
+                        if len(referenced_entries) >= limit:
+                            break
+                        
                         definition = dictionaries[dict_name][original_headword]
                         
                         if structured:
@@ -785,16 +827,26 @@ async def lookup_word(
                                 dictionary_display_name=get_display_name(dict_name),
                                 definition=definition
                             ))
+                            
+                        # Check if we've reached the limit after processing this dictionary
+                        if len(referenced_entries) >= limit:
+                            break
         
         # Add referenced entries to the result
         entries.extend(referenced_entries)
+    
+    # If we have too many entries (from references or multi-word lookup), trim to limit
+    if len(entries) > limit:
+        entries = entries[:limit]
+    
+    end_time = time.time()
     
     response_data = WordLookupResponse(
         entries=entries if entries else [],  # Ensure empty list instead of null
         query=word,
         count=len(entries),
         dictionaries_searched=list(dicts_searched),
-        time_taken=time.time() - start_time
+        time_taken=end_time - start_time
     )
     
     # Use a custom response class that will exclude null values
@@ -807,7 +859,7 @@ async def search_word(
     exact_match: bool = Query(False, description="Whether to perform exact word matching or search within definitions"),
     clean_markup: bool = Query(True, description="Whether to clean DSL markup tags (like [p], [trn], [com]) in definitions by removing them or converting to simple text"),
     structured: bool = Query(True, description="Whether to return structured data with parsed DSL markup into separate fields for meanings, translations, etc. Default is True for structured output, set to False for simple format."),
-    limit: int = Query(10, description="Maximum number of entries to return"),
+    limit: int = Query(50, description="Maximum number of entries to return"),
     readable_text: bool = Query(False, description="Whether to return readable Unicode text instead of escaped characters (helpful for non-Latin alphabets)"),
     html_output: bool = Query(False, description="Whether to convert DSL markup to HTML for better display in browsers and JSON viewers. When set to true, this takes precedence over clean_markup."),
     include_references: bool = Query(True, description="Whether to include entries referenced in look_for sections (non-recursive)")
@@ -1004,9 +1056,10 @@ async def prefix_search(
     dict_filter: Optional[Set[str]] = Depends(get_dictionary_filter),
     clean_markup: bool = Query(True, description="Whether to clean DSL markup tags (like [p], [trn], [com]) in definitions by removing them or converting to simple text"),
     structured: bool = Query(True, description="Whether to return structured data with parsed DSL markup into separate fields for meanings, translations, etc. Default is True for structured output, set to False for simple format."),
-    limit: int = Query(10, description="Maximum number of entries to return"),
+    limit: int = Query(50, description="Maximum number of entries to return"),
     readable_text: bool = Query(False, description="Whether to return readable Unicode text instead of escaped characters (helpful for non-Latin alphabets)"),
     html_output: bool = Query(False, description="Whether to convert DSL markup to HTML for better display in browsers and JSON viewers. When set to true, this takes precedence over clean_markup."),
+    include_references: bool = Query(True, description="Whether to include entries referenced in look_for sections (non-recursive)")
 ):
     """
     Find dictionary entries that start with the given prefix
@@ -1143,7 +1196,7 @@ async def prefix_search(
 async def list_entries(
     dict_name: Optional[str] = Query(None, description="Dictionary to list entries from. If not provided, lists from all dictionaries."),
     page: int = Query(1, description="Page number for pagination", ge=1),
-    page_size: int = Query(20, description="Number of entries per page", ge=1, le=100),
+    page_size: int = Query(50, description="Number of entries per page", ge=1, le=100),
     clean_markup: bool = Query(True, description="Whether to clean DSL markup tags (like [p], [trn], [com]) in definitions by removing them or converting to simple text"),
     structured: bool = Query(True, description="Whether to return structured data with parsed DSL markup into separate fields for meanings, translations, etc. Default is True for structured output, set to False for simple format."),
     readable_text: bool = Query(False, description="Whether to return readable Unicode text instead of escaped characters (helpful for non-Latin alphabets)"),
