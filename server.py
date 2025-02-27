@@ -559,7 +559,7 @@ async def lookup_word(
     """
     start_time = time.time()
     
-    entries = []
+    direct_entries = []  # Entries that are direct matches to query words
     dicts_searched = set()
     
     # Check if we have multiple words and handle them like multi-lookup
@@ -579,8 +579,8 @@ async def lookup_word(
                     dicts_searched.add(dict_name)
                     
                     for original_headword in headwords:
-                        # Check if we've reached the limit
-                        if len(entries) >= limit:
+                        # Check if we've reached the limit for direct entries
+                        if len(direct_entries) >= limit:
                             break
                             
                         definition = dictionaries[dict_name][original_headword]
@@ -592,7 +592,7 @@ async def lookup_word(
                             # Always convert the html_definition field to HTML
                             structure_data["html_definition"] = convert_dsl_to_html(definition)
                                 
-                            entries.append(StructuredWordEntry(
+                            direct_entries.append(StructuredWordEntry(
                                 word=original_headword,
                                 dictionary=dict_name,
                                 dictionary_display_name=get_display_name(dict_name),
@@ -604,20 +604,20 @@ async def lookup_word(
                             elif clean_markup:
                                 definition = clean_dsl_markup(definition)
                             
-                            entries.append(WordEntry(
+                            direct_entries.append(WordEntry(
                                 word=original_headword,
                                 dictionary=dict_name,
                                 dictionary_display_name=get_display_name(dict_name),
                                 definition=definition
                             ))
-                            
-                    # Check if we've reached the limit after processing this dictionary
-                    if len(entries) >= limit:
-                        break
                         
-                # Check if we've reached the limit after processing this normalized word
-                if len(entries) >= limit:
-                    break
+                        # Check if we've reached the limit after processing this headword
+                        if len(direct_entries) >= limit:
+                            break
+                    
+                    # Check if we've reached the limit after processing this dictionary
+                    if len(direct_entries) >= limit:
+                        break
     else:
         # Single word lookup - original implementation
         # Normalize the word for lookup
@@ -635,7 +635,7 @@ async def lookup_word(
                     
                     for original_headword in headwords:
                         # Check if we've reached the limit
-                        if len(entries) >= limit:
+                        if len(direct_entries) >= limit:
                             break
                             
                         definition = dictionaries[dict_name][original_headword]
@@ -647,7 +647,7 @@ async def lookup_word(
                             # Always convert the html_definition field to HTML
                             structure_data["html_definition"] = convert_dsl_to_html(definition)
                                 
-                            entries.append(StructuredWordEntry(
+                            direct_entries.append(StructuredWordEntry(
                                 word=original_headword,
                                 dictionary=dict_name,
                                 dictionary_display_name=get_display_name(dict_name),
@@ -659,16 +659,20 @@ async def lookup_word(
                             elif clean_markup:
                                 definition = clean_dsl_markup(definition)
                             
-                            entries.append(WordEntry(
+                            direct_entries.append(WordEntry(
                                 word=original_headword,
                                 dictionary=dict_name,
                                 dictionary_display_name=get_display_name(dict_name),
                                 definition=definition
                             ))
-                            
-                        # Check if we've reached the limit after processing this dictionary
-                        if len(entries) >= limit:
+                        
+                        # Check if we've reached the limit after processing this headword
+                        if len(direct_entries) >= limit:
                             break
+                    
+                    # Check if we've reached the limit after processing this dictionary
+                    if len(direct_entries) >= limit:
+                        break
         else:
             # Partial match - look for words that contain the query
             for dict_name, dict_entries in dictionaries.items():
@@ -681,7 +685,7 @@ async def lookup_word(
                 for headword, definition in dict_entries.items():
                     if norm_word in normalize_headword(headword):
                         # Check if we've reached the limit
-                        if len(entries) >= limit:
+                        if len(direct_entries) >= limit:
                             break
                         
                         if structured:
@@ -691,7 +695,7 @@ async def lookup_word(
                             # Always convert the html_definition field to HTML
                             structure_data["html_definition"] = convert_dsl_to_html(definition)
                                 
-                            entries.append(StructuredWordEntry(
+                            direct_entries.append(StructuredWordEntry(
                                 word=headword,
                                 dictionary=dict_name,
                                 dictionary_display_name=get_display_name(dict_name),
@@ -703,19 +707,23 @@ async def lookup_word(
                             elif clean_markup:
                                 definition = clean_dsl_markup(definition)
                             
-                            entries.append(WordEntry(
+                            direct_entries.append(WordEntry(
                                 word=headword,
                                 dictionary=dict_name,
                                 dictionary_display_name=get_display_name(dict_name),
                                 definition=definition
                             ))
-                            
-                        # Check if we've reached the limit after processing this dictionary
-                        if len(entries) >= limit:
+                        
+                        # Check if we've reached the limit after processing this dict entry
+                        if len(direct_entries) >= limit:
                             break
+                
+                # Check if we've reached the limit after processing this dictionary
+                if len(direct_entries) >= limit:
+                    break
         
         # Check if we found anything
-        if not entries:
+        if not direct_entries:
             # No exact match, try case-insensitive search
             for dict_name, dict_entries in dictionaries.items():
                 # Apply dictionary filter if provided
@@ -728,7 +736,7 @@ async def lookup_word(
                     norm_headword = normalize_headword(headword)
                     if norm_word == norm_headword:
                         # Check if we've reached the limit
-                        if len(entries) >= limit:
+                        if len(direct_entries) >= limit:
                             break
                         
                         if structured:
@@ -738,7 +746,7 @@ async def lookup_word(
                             # Always convert the html_definition field to HTML
                             structure_data["html_definition"] = convert_dsl_to_html(definition)
                                 
-                            entries.append(StructuredWordEntry(
+                            direct_entries.append(StructuredWordEntry(
                                 word=headword,
                                 dictionary=dict_name,
                                 dictionary_display_name=get_display_name(dict_name),
@@ -750,24 +758,28 @@ async def lookup_word(
                             elif clean_markup:
                                 definition = clean_dsl_markup(definition)
                             
-                            entries.append(WordEntry(
+                            direct_entries.append(WordEntry(
                                 word=headword,
                                 dictionary=dict_name,
                                 dictionary_display_name=get_display_name(dict_name),
                                 definition=definition
                             ))
-                            
-                        # Check if we've reached the limit after processing this dictionary
-                        if len(entries) >= limit:
+                        
+                        # Check if we've reached the limit after processing this dict entry
+                        if len(direct_entries) >= limit:
                             break
+                    
+                # Check if we've reached the limit after processing this dictionary
+                if len(direct_entries) >= limit:
+                    break
     
-    # Look up referenced entries if requested
+    # Handle referenced entries separately
     referenced_entries = []
-    if include_references and structured:
+    if include_references and structured and len(direct_entries) < limit:
         referenced_words = set()
         
-        # Collect all look_for words
-        for entry in entries:
+        # Collect all look_for words from direct entries
+        for entry in direct_entries:
             if isinstance(entry, StructuredWordEntry) and entry.meanings:
                 for meaning in entry.meanings:
                     if meaning.look_for:
@@ -796,8 +808,9 @@ async def lookup_word(
                     dicts_searched.add(dict_name)
                     
                     for original_headword in headwords:
-                        # Check if we've reached the limit
-                        if len(referenced_entries) >= limit:
+                        # Check if we've reached the combined limit
+                        remaining_limit = limit - len(direct_entries)
+                        if len(referenced_entries) >= remaining_limit:
                             break
                         
                         definition = dictionaries[dict_name][original_headword]
@@ -828,23 +841,25 @@ async def lookup_word(
                                 definition=definition
                             ))
                             
-                        # Check if we've reached the limit after processing this dictionary
-                        if len(referenced_entries) >= limit:
+                        # Check if we've reached the combined limit after processing this dictionary
+                        remaining_limit = limit - len(direct_entries)
+                        if len(referenced_entries) >= remaining_limit:
                             break
-        
-        # Add referenced entries to the result
-        entries.extend(referenced_entries)
     
-    # If we have too many entries (from references or multi-word lookup), trim to limit
-    if len(entries) > limit:
-        entries = entries[:limit]
+    # Combine direct entries and referenced entries, with direct entries first
+    # This ensures query words always appear before referenced words
+    combined_entries = direct_entries + referenced_entries
+    
+    # If we somehow have too many entries, trim to limit (shouldn't happen with the above logic)
+    if len(combined_entries) > limit:
+        combined_entries = combined_entries[:limit]
     
     end_time = time.time()
     
     response_data = WordLookupResponse(
-        entries=entries if entries else [],  # Ensure empty list instead of null
+        entries=combined_entries if combined_entries else [],  # Ensure empty list instead of null
         query=word,
-        count=len(entries),
+        count=len(combined_entries),
         dictionaries_searched=list(dicts_searched),
         time_taken=end_time - start_time
     )
