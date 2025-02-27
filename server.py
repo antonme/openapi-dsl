@@ -279,7 +279,7 @@ def build_inverted_index(all_dictionaries: Dict[str, Dict[str, str]]) -> Dict[st
     
     return index
 
-def parse_dsl_structure(definition: str) -> StructuredWordEntry:
+def parse_dsl_structure(definition: str) -> Dict:
     """Parse DSL markup into structured data"""
     # Extract part of speech (usually in [p]...[/p] or [pos]...[/pos] tags)
     pos_list = []
@@ -334,17 +334,24 @@ def parse_dsl_structure(definition: str) -> StructuredWordEntry:
         clean_meaning = clean_dsl_markup(clean_meaning.strip())
         
         # Check for cross-references (e.g., "See: word")
-        look_for = None
+        look_for = []
         see_match = re.search(r'^(?:-\s*)?(?:See|См\.?|Смотри(?:те)?):?\s+(.*?)$', clean_meaning, re.IGNORECASE)
         if see_match:
             references = see_match.group(1).split(',')
             look_for = [ref.strip() for ref in references]
             clean_meaning = None  # Set definition to None when it's only a cross-reference
         
+        # Also check for [ref] tags in the original meaning text
+        ref_matches = re.finditer(r'\[ref\](.*?)\[/ref\]', meaning_text)
+        for ref_match in ref_matches:
+            ref_word = ref_match.group(1).strip()
+            if ref_word not in look_for:  # Avoid duplicates
+                look_for.append(ref_word)
+        
         meanings.append(Meaning(
             number=meaning_number,
             definition=clean_meaning,
-            look_for=look_for,
+            look_for=look_for if look_for else None,
             translations=translations if translations else None,
             examples=examples if examples else None
         ))
@@ -490,6 +497,7 @@ async def lookup_word(
     structured: bool = Query(True, description="Whether to return structured data with parsed DSL markup into separate fields for meanings, translations, etc. Default is True for structured output, set to False for simple format."),
     readable_text: bool = Query(False, description="Whether to return readable Unicode text instead of escaped characters (helpful for non-Latin alphabets)"),
     html_output: bool = Query(False, description="Whether to convert DSL markup to HTML for better display in browsers and JSON viewers. When set to true, this takes precedence over clean_markup."),
+    include_references: bool = Query(True, description="Whether to include entries referenced in look_for sections (non-recursive)")
 ):
     """
     Look up a word or phrase in the dictionaries
@@ -619,6 +627,67 @@ async def lookup_word(
     if not entries:
         raise HTTPException(status_code=404, detail=f"No entries found for '{word}'")
     
+    # Look up referenced entries if requested
+    referenced_entries = []
+    if include_references and structured:
+        referenced_words = set()
+        
+        # Collect all look_for words
+        for entry in entries:
+            if isinstance(entry, StructuredWordEntry) and entry.meanings:
+                for meaning in entry.meanings:
+                    if meaning.look_for:
+                        for ref_word in meaning.look_for:
+                            # Don't add self-references
+                            if normalize_headword(ref_word) != norm_word:
+                                referenced_words.add(ref_word)
+        
+        # Look up each referenced word
+        for ref_word in referenced_words:
+            # Normalize the word for lookup
+            norm_ref_word = normalize_headword(ref_word)
+            
+            # If in inverted index, look it up
+            if norm_ref_word in inverted_index:
+                for dict_name, headwords in inverted_index[norm_ref_word].items():
+                    # Apply dictionary filter if provided
+                    if dict_filter and dict_name not in dict_filter:
+                        continue
+                    
+                    dicts_searched.add(dict_name)
+                    
+                    for original_headword in headwords:
+                        definition = dictionaries[dict_name][original_headword]
+                        
+                        if structured:
+                            # Parse structure before cleaning markup
+                            structure_data = parse_dsl_structure(definition)
+                            
+                            # Always convert the html_definition field to HTML
+                            structure_data["html_definition"] = convert_dsl_to_html(definition)
+                                
+                            referenced_entries.append(StructuredWordEntry(
+                                word=original_headword,
+                                dictionary=dict_name,
+                                dictionary_display_name=get_display_name(dict_name),
+                                **structure_data
+                            ))
+                        else:
+                            if html_output:
+                                definition = convert_dsl_to_html(definition)
+                            elif clean_markup:
+                                definition = clean_dsl_markup(definition)
+                            
+                            referenced_entries.append(WordEntry(
+                                word=original_headword,
+                                dictionary=dict_name,
+                                dictionary_display_name=get_display_name(dict_name),
+                                definition=definition
+                            ))
+        
+        # Add referenced entries to the result
+        entries.extend(referenced_entries)
+    
     response_data = WordLookupResponse(
         entries=entries,
         query=word,
@@ -638,6 +707,7 @@ async def multi_word_lookup(
     structured: bool = Query(True, description="Whether to return structured data with parsed DSL markup into separate fields for meanings, translations, etc. Default is True for structured output, set to False for simple format."),
     readable_text: bool = Query(False, description="Whether to return readable Unicode text instead of escaped characters (helpful for non-Latin alphabets)"),
     html_output: bool = Query(False, description="Whether to convert DSL markup to HTML for better display in browsers and JSON viewers. When set to true, this takes precedence over clean_markup."),
+    include_references: bool = Query(True, description="Whether to include entries referenced in look_for sections (non-recursive)")
 ):
     """
     Look up multiple words or phrases in the dictionaries.
@@ -697,6 +767,67 @@ async def multi_word_lookup(
     if not entries:
         raise HTTPException(status_code=404, detail=f"No entries found for '{query}'")
     
+    # Look up referenced entries if requested
+    referenced_entries = []
+    if include_references and structured:
+        referenced_words = set()
+        
+        # Collect all look_for words
+        for entry in entries:
+            if isinstance(entry, StructuredWordEntry) and entry.meanings:
+                for meaning in entry.meanings:
+                    if meaning.look_for:
+                        for ref_word in meaning.look_for:
+                            # Don't add self-references
+                            if normalize_headword(ref_word) not in [normalize_headword(w) for w in words]:
+                                referenced_words.add(ref_word)
+        
+        # Look up each referenced word
+        for ref_word in referenced_words:
+            # Normalize the word for lookup
+            norm_ref_word = normalize_headword(ref_word)
+            
+            # If in inverted index, look it up
+            if norm_ref_word in inverted_index:
+                for dict_name, headwords in inverted_index[norm_ref_word].items():
+                    # Apply dictionary filter if provided
+                    if dict_filter and dict_name not in dict_filter:
+                        continue
+                    
+                    dicts_searched.add(dict_name)
+                    
+                    for original_headword in headwords:
+                        definition = dictionaries[dict_name][original_headword]
+                        
+                        if structured:
+                            # Parse structure before cleaning markup
+                            structure_data = parse_dsl_structure(definition)
+                            
+                            # Always convert the html_definition field to HTML
+                            structure_data["html_definition"] = convert_dsl_to_html(definition)
+                                
+                            referenced_entries.append(StructuredWordEntry(
+                                word=original_headword,
+                                dictionary=dict_name,
+                                dictionary_display_name=get_display_name(dict_name),
+                                **structure_data
+                            ))
+                        else:
+                            if html_output:
+                                definition = convert_dsl_to_html(definition)
+                            elif clean_markup:
+                                definition = clean_dsl_markup(definition)
+                            
+                            referenced_entries.append(WordEntry(
+                                word=original_headword,
+                                dictionary=dict_name,
+                                dictionary_display_name=get_display_name(dict_name),
+                                definition=definition
+                            ))
+        
+        # Add referenced entries to the result
+        entries.extend(referenced_entries)
+    
     response_data = WordLookupResponse(
         entries=entries,
         query=query,
@@ -721,6 +852,7 @@ async def search_word(
     limit: int = Query(10, description="Maximum number of entries to return"),
     readable_text: bool = Query(False, description="Whether to return readable Unicode text instead of escaped characters (helpful for non-Latin alphabets)"),
     html_output: bool = Query(False, description="Whether to convert DSL markup to HTML for better display in browsers and JSON viewers. When set to true, this takes precedence over clean_markup."),
+    include_references: bool = Query(True, description="Whether to include entries referenced in look_for sections (non-recursive)")
 ):
     """
     Search for words or phrases across dictionaries.
@@ -830,6 +962,67 @@ async def search_word(
     # If no entries found, return 404
     if not entries:
         raise HTTPException(status_code=404, detail=f"No entries found for search query '{query}'")
+    
+    # Look up referenced entries if requested
+    referenced_entries = []
+    if include_references and structured:
+        referenced_words = set()
+        
+        # Collect all look_for words
+        for entry in entries:
+            if isinstance(entry, StructuredWordEntry) and entry.meanings:
+                for meaning in entry.meanings:
+                    if meaning.look_for:
+                        for ref_word in meaning.look_for:
+                            # Don't add self-references
+                            if normalize_headword(ref_word) != normalize_headword(query):
+                                referenced_words.add(ref_word)
+        
+        # Look up each referenced word
+        for ref_word in referenced_words:
+            # Normalize the word for lookup
+            norm_ref_word = normalize_headword(ref_word)
+            
+            # If in inverted index, look it up
+            if norm_ref_word in inverted_index:
+                for dict_name, headwords in inverted_index[norm_ref_word].items():
+                    # Apply dictionary filter if provided
+                    if dict_filter and dict_name not in dict_filter:
+                        continue
+                    
+                    dicts_searched.add(dict_name)
+                    
+                    for original_headword in headwords:
+                        definition = dictionaries[dict_name][original_headword]
+                        
+                        if structured:
+                            # Parse structure before cleaning markup
+                            structure_data = parse_dsl_structure(definition)
+                            
+                            # Always convert the html_definition field to HTML
+                            structure_data["html_definition"] = convert_dsl_to_html(definition)
+                                
+                            referenced_entries.append(StructuredWordEntry(
+                                word=original_headword,
+                                dictionary=dict_name,
+                                dictionary_display_name=get_display_name(dict_name),
+                                **structure_data
+                            ))
+                        else:
+                            if html_output:
+                                definition = convert_dsl_to_html(definition)
+                            elif clean_markup:
+                                definition = clean_dsl_markup(definition)
+                            
+                            referenced_entries.append(WordEntry(
+                                word=original_headword,
+                                dictionary=dict_name,
+                                dictionary_display_name=get_display_name(dict_name),
+                                definition=definition
+                            ))
+        
+        # Add referenced entries to the result
+        entries.extend(referenced_entries)
     
     response_data = WordLookupResponse(
         entries=entries,
