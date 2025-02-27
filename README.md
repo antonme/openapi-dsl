@@ -1,6 +1,7 @@
 # Lingvo DSL Dictionary API Server
 
 A simple OpenAPI-compliant server for Lingvo DSL dictionary lookups
+Have no official connection whatsoever to either ABBYY or Lingvo.
 
 ## Features
 
