@@ -86,7 +86,7 @@ The DSL files should be placed in the `Dicts` directory. The server supports the
 ## Performance Optimizations
 
 This server is optimized for performance:
-- In-memory storage for fast lookups
+- In-memory storage for fast-enough lookups
 - Inverted indexing for efficient word searches
 - Normalization of headwords for case-insensitive matching
 - Caching of parsed dictionaries to avoid re-parsing on restart
