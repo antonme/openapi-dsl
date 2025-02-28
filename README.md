@@ -3,15 +3,6 @@
 A simple OpenAPI-compliant server for Lingvo DSL dictionary lookups.
 > Has no official connection whatsoever to either ABBYY or Lingvo.
 
-## Features
-
-- Fast dictionary lookups (<500ms response time)
-- Complete preservation of linguistic data from DSL dictionaries
-- Support for stress marks, conjugations, declensions, and other linguistic features
-- Support for both direct dictionary lookups and content searching
-- Inverted indexing for efficient searches
-- Automatic caching of parsed dictionaries for faster startup
-- OpenAPI documentation with Swagger UI
 
 ## Requirements
 
@@ -82,12 +73,6 @@ The API offers two distinct ways to find dictionary information:
 
 Choose the endpoint that better fits your use case - lookup for known words, search for exploration.
 
-### API Documentation
-
-The OpenAPI documentation is available at:
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
-- OpenAPI JSON: http://localhost:8000/openapi.json
 
 ## Dictionary Format
 
